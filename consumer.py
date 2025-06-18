@@ -28,14 +28,30 @@ def process_new_message(
     log.info("properties: %s", properties)
     log.info("body: %s", body)
 
+    log.warning("Start processing message (expensive task) %r", body)
+
+    start_time = time.time()
+
+    number = int(body[-2:])
+    is_odd = number % 2
+
+    time.sleep(1 + is_odd * 2)
+
+    end_time = time.time()
     ch.basic_ack(delivery_tag=method.delivery_tag)
-    log.warning("Finished processing message %r", body)
+    log.warning(
+        "Finished processing message %r in %.2fs",
+        body,
+        end_time - start_time,
+    )
 
 
 def consume_messages(channel: "BlockingChannel"):
+    channel.basic_qos(prefetch_count=1)
     channel.basic_consume(
         queue=RMQ_ROUTING_KEY,
         on_message_callback=process_new_message,
+        # auto_ack=True,
     )
     log.warning("Waiting for messages")
     channel.start_consuming()

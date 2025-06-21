@@ -2,19 +2,21 @@ from typing import TYPE_CHECKING
 
 import logging
 import time
+import config
 
 from config import (
     get_connection,
     configure_logging,
     RMQ_EXCHANGE,
-    RMQ_ROUTING_KEY,
 )
 
-from rabbit import RabbitBase
+from rabbit.common import EmailUpdatesRabbit
+
+
+from pika.spec import Basic, BasicProperties
 
 if TYPE_CHECKING:
     from pika.adapters.blocking_connection import BlockingChannel
-    from pika.spec import Basic, BasicProperties
 
 log = logging.getLogger(__name__)
 
@@ -30,40 +32,28 @@ def process_new_message(
     log.info("properties: %s", properties)
     log.info("body: %s", body)
 
-    log.warning("Start processing message (expensive task) %r", body)
+    log.warning("[ ] Updating user email for newsletters %r.", body)
 
     start_time = time.time()
 
-    number = int(body[-2:])
-    is_odd = number % 2
-
-    time.sleep(1 + is_odd * 2)
+    time.sleep(1)
 
     end_time = time.time()
     ch.basic_ack(delivery_tag=method.delivery_tag)
     log.warning(
-        "Finished processing message %r in %.2fs",
-        body,
+        "[X] Updated user email in %.2fs, message %r is OK.",
         end_time - start_time,
+        body,
     )
-
-
-def consume_messages(channel: "BlockingChannel"):
-    channel.basic_qos(prefetch_count=1)
-    channel.queue_declare(RMQ_ROUTING_KEY)
-    channel.basic_consume(
-        queue=RMQ_ROUTING_KEY,
-        on_message_callback=process_new_message,
-        # auto_ack=True,
-    )
-    log.warning("Waiting for messages")
-    channel.start_consuming()
 
 
 def main():
     configure_logging()
-    with RabbitBase() as rabbit:
-        consume_messages(channel=rabbit.channel)
+    with EmailUpdatesRabbit() as rabbit:
+        rabbit.consume_messages(
+            message_callback=process_new_message,
+            queue_name=config.RMQ_QUEUE_NAME_NEWSLETTER_EMAIL_UPDATES,
+        )
 
 
 if __name__ == "__main__":
